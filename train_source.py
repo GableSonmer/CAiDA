@@ -16,11 +16,16 @@ from loss import CrossEntropyLabelSmooth
 from scipy.spatial.distance import cdist
 from sklearn.metrics import confusion_matrix
 from sklearn.cluster import KMeans
+import warnings
+
+warnings.filterwarnings('ignore')
+
 
 def op_copy(optimizer):
     for param_group in optimizer.param_groups:
         param_group['lr0'] = param_group['lr']
     return optimizer
+
 
 def lr_scheduler(optimizer, iter_num, max_iter, gamma=10, power=0.75):
     decay = (1 + gamma * iter_num / max_iter) ** (-power)
@@ -31,13 +36,14 @@ def lr_scheduler(optimizer, iter_num, max_iter, gamma=10, power=0.75):
         param_group['nesterov'] = True
     return optimizer
 
+
 def image_train(resize_size=256, crop_size=224, alexnet=False):
-  # if not alexnet:
-  normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                   std=[0.229, 0.224, 0.225])
-  # else:
-  #   normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
-  return  transforms.Compose([
+    # if not alexnet:
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+    # else:
+    #   normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
+    return transforms.Compose([
         transforms.Resize((resize_size, resize_size)),
         transforms.RandomCrop(crop_size),
         transforms.RandomHorizontalFlip(),
@@ -45,20 +51,22 @@ def image_train(resize_size=256, crop_size=224, alexnet=False):
         normalize
     ])
 
+
 def image_test(resize_size=256, crop_size=224, alexnet=False):
-  # if not alexnet:
-  normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                   std=[0.229, 0.224, 0.225])
-  # else:
-  #   normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
-  return  transforms.Compose([
+    # if not alexnet:
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+    # else:
+    #   normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
+    return transforms.Compose([
         transforms.Resize((resize_size, resize_size)),
         transforms.CenterCrop(crop_size),
         transforms.ToTensor(),
         normalize
     ])
 
-def data_load(args): 
+
+def data_load(args):
     ## prepare data
     dsets = {}
     dset_loaders = {}
@@ -68,30 +76,34 @@ def data_load(args):
 
     if args.trte == "val":
         dsize = len(txt_src)
-        tr_size = int(0.9*dsize)
+        tr_size = int(0.9 * dsize)
         # print(dsize, tr_size, dsize - tr_size)
         tr_txt, te_txt = torch.utils.data.random_split(txt_src, [tr_size, dsize - tr_size])
     else:
         dsize = len(txt_src)
-        tr_size = int(0.9*dsize)
+        tr_size = int(0.9 * dsize)
         _, te_txt = torch.utils.data.random_split(txt_src, [tr_size, dsize - tr_size])
         tr_txt = txt_src
 
     dsets["source_tr"] = ImageList(tr_txt, transform=image_train())
-    dset_loaders["source_tr"] = DataLoader(dsets["source_tr"], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
+    dset_loaders["source_tr"] = DataLoader(dsets["source_tr"], batch_size=train_bs, shuffle=True,
+                                           num_workers=args.worker, drop_last=False)
     dsets["source_te"] = ImageList(te_txt, transform=image_test())
-    dset_loaders["source_te"] = DataLoader(dsets["source_te"], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
+    dset_loaders["source_te"] = DataLoader(dsets["source_te"], batch_size=train_bs, shuffle=True,
+                                           num_workers=args.worker, drop_last=False)
     dsets["test"] = ImageList(txt_test, transform=image_test())
-    dset_loaders["test"] = DataLoader(dsets["test"], batch_size=train_bs*2, shuffle=True, num_workers=args.worker, drop_last=False)
+    dset_loaders["test"] = DataLoader(dsets["test"], batch_size=train_bs * 2, shuffle=True, num_workers=args.worker,
+                                      drop_last=False)
 
     return dset_loaders
+
 
 def cal_acc(loader, netF, netB, netC, flag=False):
     start_test = True
     with torch.no_grad():
         iter_test = iter(loader)
         for i in range(len(loader)):
-            data = iter_test.next()
+            data = next(iter_test)
             inputs = data[0]
             labels = data[1]
             inputs = inputs.cuda()
@@ -108,16 +120,17 @@ def cal_acc(loader, netF, netB, netC, flag=False):
     _, predict = torch.max(all_output, 1)
     accuracy = torch.sum(torch.squeeze(predict).float() == all_label).item() / float(all_label.size()[0])
     mean_ent = torch.mean(loss.Entropy(all_output)).cpu().data.item()
-   
+
     if flag:
         matrix = confusion_matrix(all_label, torch.squeeze(predict).float())
-        acc = matrix.diagonal()/matrix.sum(axis=1) * 100
+        acc = matrix.diagonal() / matrix.sum(axis=1) * 100
         aacc = acc.mean()
         aa = [str(np.round(i, 2)) for i in acc]
         acc = ' '.join(aa)
         return aacc, acc
     else:
-        return accuracy*100, mean_ent
+        return accuracy * 100, mean_ent
+
 
 def train_source(args):
     dset_loaders = data_load(args)
@@ -125,19 +138,20 @@ def train_source(args):
     if args.net[0:3] == 'res':
         netF = network.ResBase(res_name=args.net).cuda()
     elif args.net[0:3] == 'vgg':
-        netF = network.VGGBase(vgg_name=args.net).cuda()  
+        netF = network.VGGBase(vgg_name=args.net).cuda()
 
-    netB = network.feat_bottleneck(type=args.classifier, feature_dim=netF.in_features, bottleneck_dim=args.bottleneck).cuda()
-    netC = network.feat_classifier(type=args.layer, class_num = args.class_num, bottleneck_dim=args.bottleneck).cuda()
+    netB = network.feat_bottleneck(type=args.classifier, feature_dim=netF.in_features,
+                                   bottleneck_dim=args.bottleneck).cuda()
+    netC = network.feat_classifier(type=args.layer, class_num=args.class_num, bottleneck_dim=args.bottleneck).cuda()
 
     param_group = []
     learning_rate = args.lr
     for k, v in netF.named_parameters():
-        param_group += [{'params': v, 'lr': learning_rate*0.1}]
+        param_group += [{'params': v, 'lr': learning_rate * 0.1}]
     for k, v in netB.named_parameters():
         param_group += [{'params': v, 'lr': learning_rate}]
     for k, v in netC.named_parameters():
-        param_group += [{'params': v, 'lr': learning_rate}]   
+        param_group += [{'params': v, 'lr': learning_rate}]
     optimizer = optim.SGD(param_group)
     optimizer = op_copy(optimizer)
 
@@ -150,12 +164,13 @@ def train_source(args):
     netB.train()
     netC.train()
 
+    iter_source = iter(dset_loaders["source_tr"])
     while iter_num < max_iter:
         try:
-            inputs_source, labels_source = iter_source.next()
+            inputs_source, labels_source = next(iter_source)
         except:
             iter_source = iter(dset_loaders["source_tr"])
-            inputs_source, labels_source = iter_source.next()
+            inputs_source, labels_source = next(iter_source)
 
         if inputs_source.size(0) == 1:
             continue
@@ -165,8 +180,9 @@ def train_source(args):
 
         inputs_source, labels_source = inputs_source.cuda(), labels_source.cuda()
         outputs_source = netC(netB(netF(inputs_source)))
-        classifier_loss = CrossEntropyLabelSmooth(num_classes=args.class_num, epsilon=args.smooth)(outputs_source, labels_source)            
-        
+        classifier_loss = CrossEntropyLabelSmooth(num_classes=args.class_num, epsilon=args.smooth)(outputs_source,
+                                                                                                   labels_source)
+
         optimizer.zero_grad()
         classifier_loss.backward()
         optimizer.step()
@@ -179,7 +195,7 @@ def train_source(args):
             log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%'.format(args.name_src, iter_num, max_iter, acc_s_te)
             args.out_file.write(log_str + '\n')
             args.out_file.flush()
-            print(log_str+'\n')
+            print(log_str + '\n')
 
             if acc_s_te >= acc_init:
                 acc_init = acc_s_te
@@ -190,12 +206,13 @@ def train_source(args):
             netF.train()
             netB.train()
             netC.train()
-                
+
     torch.save(best_netF, osp.join(args.output_dir_src, "source_F.pt"))
     torch.save(best_netB, osp.join(args.output_dir_src, "source_B.pt"))
     torch.save(best_netC, osp.join(args.output_dir_src, "source_C.pt"))
 
     return netF, netB, netC
+
 
 def test_target(args):
     dset_loaders = data_load(args)
@@ -203,16 +220,17 @@ def test_target(args):
     if args.net[0:3] == 'res':
         netF = network.ResBase(res_name=args.net).cuda()
     elif args.net[0:3] == 'vgg':
-        netF = network.VGGBase(vgg_name=args.net).cuda()  
+        netF = network.VGGBase(vgg_name=args.net).cuda()
 
-    netB = network.feat_bottleneck(type=args.classifier, feature_dim=netF.in_features, bottleneck_dim=args.bottleneck).cuda()
-    netC = network.feat_classifier(type=args.layer, class_num = args.class_num, bottleneck_dim=args.bottleneck).cuda()
-    
-    args.modelpath = args.output_dir_src + '/source_F.pt'   
+    netB = network.feat_bottleneck(type=args.classifier, feature_dim=netF.in_features,
+                                   bottleneck_dim=args.bottleneck).cuda()
+    netC = network.feat_classifier(type=args.layer, class_num=args.class_num, bottleneck_dim=args.bottleneck).cuda()
+
+    args.modelpath = args.output_dir_src + '/source_F.pt'
     netF.load_state_dict(torch.load(args.modelpath))
-    args.modelpath = args.output_dir_src + '/source_B.pt'   
+    args.modelpath = args.output_dir_src + '/source_B.pt'
     netB.load_state_dict(torch.load(args.modelpath))
-    args.modelpath = args.output_dir_src + '/source_C.pt'   
+    args.modelpath = args.output_dir_src + '/source_C.pt'
     netC.load_state_dict(torch.load(args.modelpath))
     netF.eval()
     netB.eval()
@@ -225,11 +243,13 @@ def test_target(args):
     args.out_file.flush()
     print(log_str)
 
+
 def print_args(args):
     s = "==========================================\n"
     for arg, content in args.__dict__.items():
         s += "{}:{}\n".format(arg, content)
     return s
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='CAiDA')
@@ -248,13 +268,13 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--smooth', type=float, default=0.1)
-    parser.add_argument('--output', type=str, default='ckps/source')
+    parser.add_argument('--output', type=str, default='ckps\\source')
     parser.add_argument('--trte', type=str, default='val', choices=['full', 'val'])
     args = parser.parse_args()
 
     if args.dset == 'office-home':
         names = ['Art', 'Clipart', 'Product', 'Real_World']
-        args.class_num = 65 
+        args.class_num = 65
     if args.dset == 'office-31':
         names = ['amazon', 'dslr', 'webcam']
         args.class_num = 31
@@ -270,21 +290,24 @@ if __name__ == "__main__":
     random.seed(SEED)
     # torch.backends.cudnn.deterministic = True
 
-    folder = './data'
-    args.s_dset_path = folder + args.dset + '/' + names[args.s] + '_list.txt'
-    args.test_dset_path = folder + args.dset + '/' + names[args.t] + '_list.txt'     
+    # folder = './data'
+    folder = 'data'
+    # args.s_dset_path = folder + '/' + args.dset + '/' + names[args.s] + '/' + names[args.s] + '_list.txt'
+    args.s_dset_path = osp.join(folder, args.dset, names[args.s] + '_list.txt')
+    # args.test_dset_path = folder + '/' + args.dset + '/' + names[args.t] + '/' + names[args.t] + '_list.txt'
+    args.test_dset_path = osp.join(folder, args.dset, names[args.t] + '_list.txt')
 
-    args.output_dir_src = osp.join(args.output, args.dset, names[args.s][0].upper())
+    args.output_dir_src = osp.join('ckps', 'source', args.dset, names[args.s][0].upper())
     args.name_src = names[args.s][0].upper()
     if not osp.exists(args.output_dir_src):
         os.system('mkdir -p ' + args.output_dir_src)
     if not osp.exists(args.output_dir_src):
         os.mkdir(args.output_dir_src)
 
-    args.out_file = open(osp.join(args.output_dir_src, 'log.txt'), 'w')
-    args.out_file.write(print_args(args)+'\n')
+    args.out_file = open(osp.join(args.output_dir_src, 'log.txt'), 'w', encoding='utf-8')
+    args.out_file.write(print_args(args) + '\n')
     args.out_file.flush()
-    
+
     train_source(args)
 
     args.out_file = open(osp.join(args.output_dir_src, 'log_test.txt'), 'w')
