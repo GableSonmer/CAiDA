@@ -2,7 +2,7 @@
 gpu_id:0
 s:0
 t:1
-max_epoch:100
+max_epoch:1
 batch_size:32
 worker:4
 dset:office-31
@@ -23,4 +23,8 @@ output_dir_src:ckps\source\office-31\A
 name_src:A
 out_file:<_io.TextIOWrapper name='ckps\\source\\office-31\\A\\log.txt' mode='w' encoding='utf-8'>
 
-Task: A, Iter:800/8000; Accuracy = 85.46%
+Task: A, Iter:1/5; Accuracy = 81.56%
+Task: A, Iter:2/5; Accuracy = 82.62%
+Task: A, Iter:3/5; Accuracy = 82.98%
+Task: A, Iter:4/5; Accuracy = 83.69%
+Task: A, Iter:5/5; Accuracy = 84.75%

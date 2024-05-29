@@ -1,0 +1,30 @@
+==========================================
+gpu_id:0
+s:2
+t:1
+max_epoch:1
+batch_size:32
+worker:4
+dset:office-31
+lr:0.01
+net:resnet50
+seed:2022
+bottleneck:256
+epsilon:1e-05
+layer:wn
+classifier:bn
+smooth:0.1
+output:ckps/source/
+trte:val
+class_num:31
+s_dset_path:data\office-31\webcam_list.txt
+test_dset_path:data\office-31\dslr_list.txt
+output_dir_src:ckps\source\office-31\W
+name_src:W
+out_file:<_io.TextIOWrapper name='ckps\\source\\office-31\\W\\log.txt' mode='w' encoding='utf-8'>
+
+Task: W, Iter:1/5; Accuracy = 90.00%
+Task: W, Iter:2/5; Accuracy = 97.50%
+Task: W, Iter:3/5; Accuracy = 98.75%
+Task: W, Iter:4/5; Accuracy = 98.75%
+Task: W, Iter:5/5; Accuracy = 100.00%

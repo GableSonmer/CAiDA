@@ -1,0 +1,3 @@
+
+Training: val, Task: WA, Accuracy = 58.36%
+Training: val, Task: WD, Accuracy = 99.00%

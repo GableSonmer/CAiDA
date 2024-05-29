@@ -156,36 +156,46 @@ def train_source(args):
     optimizer = op_copy(optimizer)
 
     acc_init = 0
-    max_iter = args.max_epoch * len(dset_loaders["source_tr"])
-    interval_iter = max_iter // 10
+    # max_iter = args.max_epoch * len(dset_loaders["source_tr"])
+    max_iter = 5
+    # interval_iter = max_iter // 10
+    interval_iter = 1
     iter_num = 0
+    print('-' * 100)
+    print('Start Training')
+    print('Max Iteration:', max_iter, 'Interval Iteration:', interval_iter)
+    print('-' * 100)
 
     netF.train()
     netB.train()
     netC.train()
 
-    iter_source = iter(dset_loaders["source_tr"])
+    # iter_source = iter(dset_loaders["source_tr"])
     while iter_num < max_iter:
-        try:
-            inputs_source, labels_source = next(iter_source)
-        except:
-            iter_source = iter(dset_loaders["source_tr"])
-            inputs_source, labels_source = next(iter_source)
-
-        if inputs_source.size(0) == 1:
-            continue
+        # try:
+        #     inputs_source, labels_source = next(iter_source)
+        # except:
+        #     iter_source = iter(dset_loaders["source_tr"])
+        #     inputs_source, labels_source = next(iter_source)
+        #
+        # if inputs_source.size(0) == 1:
+        #     continue
 
         iter_num += 1
-        lr_scheduler(optimizer, iter_num=iter_num, max_iter=max_iter)
+        print(f'Iter {iter_num}/{max_iter}')
+        for inputs_source, labels_source in tqdm(dset_loaders["source_tr"]):
+            lr_scheduler(optimizer, iter_num=iter_num, max_iter=max_iter)
 
-        inputs_source, labels_source = inputs_source.cuda(), labels_source.cuda()
-        outputs_source = netC(netB(netF(inputs_source)))
-        classifier_loss = CrossEntropyLabelSmooth(num_classes=args.class_num, epsilon=args.smooth)(outputs_source,
-                                                                                                   labels_source)
+            inputs_source, labels_source = inputs_source.cuda(), labels_source.cuda()  # batch*3*224*224, batch*1
+            outputs_source = netF(inputs_source)  # batch*2048
+            outputs_source = netB(outputs_source)  # batch*256
+            outputs_source = netC(outputs_source)  # batch*31
+            classifier_loss = CrossEntropyLabelSmooth(num_classes=args.class_num, epsilon=args.smooth)(outputs_source,
+                                                                                                       labels_source)
 
-        optimizer.zero_grad()
-        classifier_loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            classifier_loss.backward()
+            optimizer.step()
 
         if iter_num % interval_iter == 0 or iter_num == max_iter:
             netF.eval()
@@ -256,7 +266,7 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
-    parser.add_argument('--max_epoch', type=int, default=100, help="max iterations")
+    parser.add_argument('--max_epoch', type=int, default=10, help="max iterations")
     parser.add_argument('--batch_size', type=int, default=32, help="batch_size")
     parser.add_argument('--worker', type=int, default=4, help="number of workers")
     parser.add_argument('--dset', type=str, default='office-31', choices=['office-31', 'office-home', 'office-caltech'])
@@ -275,12 +285,14 @@ if __name__ == "__main__":
     if args.dset == 'office-home':
         names = ['Art', 'Clipart', 'Product', 'Real_World']
         args.class_num = 65
-    if args.dset == 'office-31':
+    elif args.dset == 'office-31':
         names = ['amazon', 'dslr', 'webcam']
         args.class_num = 31
-    if args.dset == 'office-caltech':
+    elif args.dset == 'office-caltech':
         names = ['amazon', 'caltech', 'dslr', 'webcam']
         args.class_num = 10
+    else:
+        raise ValueError('Dataset cannot be recognized. Please define your own dataset path.')
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     SEED = args.seed
@@ -310,15 +322,15 @@ if __name__ == "__main__":
 
     train_source(args)
 
-    args.out_file = open(osp.join(args.output_dir_src, 'log_test.txt'), 'w')
+    args.out_file = open(osp.join(args.output_dir_src, 'log_test.txt'), 'w', encoding='utf-8')
     for i in range(len(names)):
         if i == args.s:
-            continue
+            continue  # first as domain, second as target
         args.t = i
         args.name = names[args.s][0].upper() + names[args.t][0].upper()
 
-        folder = './data'
-        args.s_dset_path = folder + args.dset + '/' + names[args.s] + '_list.txt'
-        args.test_dset_path = folder + args.dset + '/' + names[args.t] + '_list.txt'
+        folder = 'data'
+        args.s_dset_path = osp.join(folder, args.dset, names[args.s] + '_list.txt')
+        args.test_dset_path = osp.join(folder, args.dset, names[args.t] + '_list.txt')
 
         test_target(args)
